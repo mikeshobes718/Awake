@@ -42,6 +42,7 @@ func renderIcon(scaleTo size: CGFloat) -> NSBitmapImageRep {
 
     ctx.cgContext.setAllowsAntialiasing(true)
     ctx.cgContext.setShouldAntialias(true)
+    ctx.cgContext.scaleBy(x: size / canvas, y: size / canvas)
 
     let tile = NSBezierPath(roundedRect: tileRect, xRadius: tileSide * 0.225, yRadius: tileSide * 0.225)
     NSGradient(colors: [creamTop, creamBottom])!.draw(in: tile, angle: -90)
