@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ("Keep awake 1 hour", 3600),
         ("Keep awake 2 hours", 7200),
         ("Keep awake 4 hours", 14400),
+        ("Keep awake 6 hours", 21600),
+        ("Keep awake 8 hours", 28800),
         ("Keep awake indefinitely", nil)
     ]
 
