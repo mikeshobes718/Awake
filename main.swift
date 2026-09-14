@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     var statusRow: NSMenuItem!
     var durationItems: [NSMenuItem] = []
+    var customItem: NSMenuItem!
     var stopItem: NSMenuItem!
     var loginItem: NSMenuItem!
     var testItem: NSMenuItem?
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var assertionID: IOPMAssertionID = 0
     var hasAssertion = false
     var activeDurationIndex: Int?
+    var customIsActive = false
     var expirationDate: Date?
     var timer: Timer?
 
@@ -59,6 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
             durationItems.append(item)
         }
+
+        customItem = NSMenuItem(title: customMenuTitle(), action: #selector(customTime(_:)), keyEquivalent: "")
+        customItem.target = self
+        menu.addItem(customItem)
 
         stopItem = NSMenuItem(title: "Turn off", action: #selector(stop(_:)), keyEquivalent: "")
         stopItem.target = self
@@ -97,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stopAll()
     }
 
-    func start(duration: TimeInterval?, index: Int) {
+    func start(duration: TimeInterval?, index: Int, custom: Bool = false) {
         stopAssertion()
         let result = IOPMAssertionCreateWithName(
             "PreventUserIdleDisplaySleep" as CFString,
@@ -108,12 +114,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard result == 0 else {
             hasAssertion = false
             activeDurationIndex = nil
+            customIsActive = false
             expirationDate = nil
             refreshMenu()
             return
         }
         hasAssertion = true
-        activeDurationIndex = index
+        customIsActive = custom
+        activeDurationIndex = custom ? nil : index
         expirationDate = duration.map { Date().addingTimeInterval($0) }
         refreshMenu()
     }
@@ -121,8 +129,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func stopAll() {
         stopAssertion()
         activeDurationIndex = nil
+        customIsActive = false
         expirationDate = nil
         refreshMenu()
+    }
+
+    @objc func customTime(_ sender: NSMenuItem) {
+        NSApp.activate(ignoringOtherApps: true)
+        let hours = UserDefaults.standard.object(forKey: "customHours") as? Int ?? 0
+        var minutes = UserDefaults.standard.object(forKey: "customMinutes") as? Int ?? 45
+        if hours == 0 && minutes == 0 { minutes = 45 }
+
+        let accessory = CustomTimeAccessory(hours: hours, minutes: minutes)
+        let alert = NSAlert()
+        alert.messageText = "Custom time"
+        alert.informativeText = "How long should the display stay awake?"
+        alert.accessoryView = accessory
+        alert.addButton(withTitle: "Keep awake")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = accessory.hoursField
+
+        let response = alert.runModal()
+        NSApp.setActivationPolicy(.accessory)
+        guard response == .alertFirstButtonReturn else { return }
+
+        let h = accessory.hoursValue
+        let m = accessory.minutesValue
+        guard h > 0 || m > 0 else { return }
+        UserDefaults.standard.set(h, forKey: "customHours")
+        UserDefaults.standard.set(m, forKey: "customMinutes")
+        start(duration: TimeInterval(h * 3600 + m * 60), index: -2, custom: true)
+    }
+
+    func customMenuTitle() -> String {
+        let h = UserDefaults.standard.object(forKey: "customHours") as? Int ?? 0
+        let m = UserDefaults.standard.object(forKey: "customMinutes") as? Int ?? 45
+        if h == 0 && m == 0 { return "Custom time..." }
+        return "Custom time (\(formatDurationLabel(hours: h, minutes: m)))..."
+    }
+
+    func formatDurationLabel(hours: Int, minutes: Int) -> String {
+        if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
+        if hours > 0 { return hours == 1 ? "1 hour" : "\(hours) hours" }
+        return minutes == 1 ? "1 minute" : "\(minutes) minutes"
     }
 
     func stopAssertion() {
@@ -164,11 +213,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func updateStatusText() {
         if hasAssertion {
             if let exp = expirationDate {
-                statusRow.title = "Awake for " + formatRemaining(exp)
+                let remaining = formatRemaining(exp)
+                statusRow.title = "Time left " + remaining
+                statusItem.button?.title = remaining
             } else {
                 statusRow.title = "Awake indefinitely"
+                statusItem.button?.title = ""
             }
-            statusItem.button?.title = expirationDate.map { formatRemaining($0) } ?? ""
         } else {
             statusRow.title = "Display sleep: Off"
             statusItem.button?.title = ""
@@ -182,8 +233,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func refreshMenu() {
         for (index, item) in durationItems.enumerated() {
-            item.state = (hasAssertion && index == activeDurationIndex) ? .on : .off
+            item.state = (hasAssertion && !customIsActive && index == activeDurationIndex) ? .on : .off
         }
+        customItem.title = customMenuTitle()
+        customItem.state = (hasAssertion && customIsActive) ? .on : .off
         stopItem.isEnabled = hasAssertion
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         updateStatusText()
@@ -202,6 +255,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         stopAssertion()
+    }
+}
+
+final class CustomTimeAccessory: NSView, NSTextFieldDelegate {
+    let hoursField = NSTextField()
+    let minutesField = NSTextField()
+
+    var hoursValue: Int { clamp(Int(hoursField.stringValue) ?? 0, 0, 99) }
+    var minutesValue: Int { clamp(Int(minutesField.stringValue) ?? 0, 0, 59) }
+
+    init(hours: Int, minutes: Int) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 54))
+        let hoursLabel = label("Hours")
+        let minutesLabel = label("Minutes")
+        style(hoursField)
+        style(minutesField)
+        hoursField.stringValue = String(hours)
+        minutesField.stringValue = String(minutes)
+        hoursField.delegate = self
+        minutesField.delegate = self
+        hoursLabel.frame = NSRect(x: 0, y: 32, width: 130, height: 16)
+        minutesLabel.frame = NSRect(x: 150, y: 32, width: 130, height: 16)
+        hoursField.frame = NSRect(x: 0, y: 4, width: 130, height: 24)
+        minutesField.frame = NSRect(x: 150, y: 4, width: 130, height: 24)
+        addSubview(hoursLabel)
+        addSubview(minutesLabel)
+        addSubview(hoursField)
+        addSubview(minutesField)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        hoursField.stringValue = String(hoursValue)
+        minutesField.stringValue = String(minutesValue)
+    }
+
+    private func label(_ title: String) -> NSTextField {
+        let t = NSTextField(labelWithString: title)
+        t.font = .systemFont(ofSize: 11)
+        t.textColor = .secondaryLabelColor
+        return t
+    }
+
+    private func style(_ field: NSTextField) {
+        field.font = .systemFont(ofSize: 13)
+        field.alignment = .center
+        field.placeholderString = "0"
+    }
+
+    private func clamp(_ value: Int, _ lo: Int, _ hi: Int) -> Int {
+        min(hi, max(lo, value))
     }
 }
 

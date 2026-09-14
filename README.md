@@ -8,7 +8,7 @@ The point: no more `caffeinate -d -t 7200` in a terminal.
 
 ## Features
 
-- Menu bar cup icon with durations: 30 minutes, 1, 2, 4 hours, or indefinitely
+- Menu bar cup icon with durations: 30 minutes, 1, 2, 4, 6, 8 hours, indefinitely, or a custom hours and minutes time
 - Live countdown in both the menu bar icon and the menu
 - Local notification when a timed session expires
 - Optional "Start at login" via Apple's modern `SMAppService`

@@ -9,9 +9,9 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.mikeshobes.Awake</string>
 	<key>CFBundleVersion</key>
-	<string>1.0</string>
+	<string>1.2</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.2</string>
 	<key>CFBundleExecutable</key>
 	<string>Awake</string>
 	<key>CFBundleIconFile</key>
